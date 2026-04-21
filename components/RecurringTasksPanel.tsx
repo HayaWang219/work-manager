@@ -29,7 +29,7 @@ export default function RecurringTasksPanel() {
     await fetch(`/api/recurring/${t.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_active: t.is_active === 1 ? 0 : 1 }),
+      body: JSON.stringify({ is_active: !t.is_active }),
     });
     fetchTemplates();
   }
@@ -39,7 +39,7 @@ export default function RecurringTasksPanel() {
     fetchTemplates();
   }
 
-  const activeTemplates = templates.filter(t => t.is_active === 1);
+  const activeTemplates = templates.filter(t => t.is_active);
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-3">
@@ -71,7 +71,7 @@ export default function RecurringTasksPanel() {
               <div key={t.id} className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={t.is_active === 1}
+                  checked={t.is_active}
                   onChange={() => toggleActive(t)}
                   className="rounded"
                 />

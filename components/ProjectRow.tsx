@@ -61,7 +61,7 @@ function InlineEdit({
   );
 }
 
-function dueDateStyle(dateStr?: string): string {
+function dueDateStyle(dateStr?: string | null): string {
   if (!dateStr) return 'text-gray-300 italic';
   const today = new Date().toISOString().split('T')[0];
   const diff = Math.ceil((new Date(dateStr).getTime() - new Date(today).getTime()) / 86400000);

@@ -37,7 +37,7 @@ export default function Notepad() {
     await fetch(`/api/notes/${note.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pinned: note.pinned === 1 ? 0 : 1 }),
+      body: JSON.stringify({ pinned: !note.pinned }),
     });
     fetchNotes(search || undefined);
   }

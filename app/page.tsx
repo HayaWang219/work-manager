@@ -3,10 +3,8 @@ import { useState, useEffect, useCallback } from 'react';
 import type { Task } from '@/lib/types';
 import TaskCard from '@/components/TaskCard';
 import Notepad from '@/components/Notepad';
-import CalendarStrip from '@/components/CalendarStrip';
 import WeeklyReportPanel from '@/components/WeeklyReportPanel';
 import RecurringTasksPanel from '@/components/RecurringTasksPanel';
-import NotionSyncButton from '@/components/NotionSyncButton';
 import RemindersPanel from '@/components/RemindersPanel';
 
 type DayTab = 'today' | 'tomorrow' | 'week' | 'inbox';
@@ -152,9 +150,12 @@ export default function Dashboard() {
             {new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'long' })}
           </span>
         </div>
-        <div className="flex items-center gap-4">
-          <NotionSyncButton onSynced={fetchTasks} />
-          <a href="/setup" className="text-xs text-gray-400 hover:text-gray-600">設定</a>
+        <div className="flex items-center gap-3">
+          <form action="/auth/signout" method="post">
+            <button type="submit" className="text-xs text-gray-400 hover:text-gray-600">
+              登出
+            </button>
+          </form>
         </div>
       </header>
 
@@ -280,7 +281,6 @@ export default function Dashboard() {
         <div className="w-72 flex-shrink-0 space-y-4">
           <RemindersPanel />
           <Notepad />
-          <CalendarStrip />
           <WeeklyReportPanel refreshKey={reportRefresh} />
           <RecurringTasksPanel />
         </div>

@@ -103,9 +103,9 @@ export default function TaskCard({ task, categories = [], onUpdate, onDelete }: 
         {/* Hover actions */}
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
           <button
-            onClick={() => onUpdate(task.id, { report_flag: task.report_flag === 1 ? 0 : 1 })}
+            onClick={() => onUpdate(task.id, { report_flag: !task.report_flag })}
             className={`text-xs px-2 py-0.5 rounded border transition-colors ${
-              task.report_flag === 1
+              task.report_flag
                 ? 'text-amber-600 bg-amber-50 border-amber-200'
                 : 'text-gray-400 border-gray-200 hover:text-amber-500 hover:border-amber-200'
             }`}
@@ -124,7 +124,7 @@ export default function TaskCard({ task, categories = [], onUpdate, onDelete }: 
           >刪除</button>
         </div>
 
-        {task.report_flag === 1 && (
+        {task.report_flag && (
           <span className="text-xs text-amber-500 font-medium flex-shrink-0">週報</span>
         )}
       </div>
