@@ -14,7 +14,7 @@ function highlight(text: string, query: string): React.ReactNode {
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
 }
 
 export default function ReportsPage() {
@@ -95,7 +95,7 @@ export default function ReportsPage() {
   }
 
   async function deleteDoc(id: number) {
-    if (!confirm('刪除這份週報？')) return;
+    if (!confirm('Delete this report?')) return;
     await fetch(`/api/reports/${id}`, { method: 'DELETE' });
     const newDocs = docs.filter(d => d.id !== id);
     setDocs(newDocs);
@@ -123,14 +123,14 @@ export default function ReportsPage() {
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-4">
-          <h1 className="font-semibold text-gray-800">工作管理</h1>
+          <h1 className="font-semibold text-gray-800">Work Manager</h1>
           <nav className="flex items-center gap-1">
-            <a href="/" className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded hover:bg-gray-100">今日待辦</a>
-            <a href="/projects" className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded hover:bg-gray-100">專案追蹤</a>
-            <span className="text-xs font-medium text-gray-700 bg-gray-100 px-3 py-1.5 rounded">週報記錄</span>
+            <a href="/" className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded hover:bg-gray-100">Today</a>
+            <a href="/projects" className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded hover:bg-gray-100">Projects</a>
+            <span className="text-xs font-medium text-gray-700 bg-gray-100 px-3 py-1.5 rounded">Reports</span>
           </nav>
         </div>
-        <a href="/setup" className="text-xs text-gray-400 hover:text-gray-600">設定</a>
+        <a href="/setup" className="text-xs text-gray-400 hover:text-gray-600">Settings</a>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
@@ -142,7 +142,7 @@ export default function ReportsPage() {
               type="text"
               value={search}
               onChange={e => handleSearch(e.target.value)}
-              placeholder="🔍 搜尋..."
+              placeholder="🔍 Search..."
               className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-blue-400 bg-gray-50"
             />
           </div>
@@ -153,14 +153,14 @@ export default function ReportsPage() {
               onClick={createNew}
               className="w-full text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg py-1.5 transition-colors"
             >
-              + 新增週報
+              + New Report
             </button>
           </div>
 
           {/* Doc list */}
           <div className="flex-1 overflow-y-auto">
             {docs.length === 0 && (
-              <p className="text-xs text-gray-400 text-center py-8">沒有紀錄</p>
+              <p className="text-xs text-gray-400 text-center py-8">No records</p>
             )}
             {docs.map(doc => {
               const preview = doc.content.split('\n').find(l => l.trim()) ?? '';
@@ -207,16 +207,16 @@ export default function ReportsPage() {
                     type="text"
                     value={title}
                     onChange={e => { setTitle(e.target.value); setDirty(true); }}
-                    placeholder="標題（選填）"
+                    placeholder="Title (optional)"
                     className="flex-1 text-sm border border-gray-200 rounded px-2 py-1 outline-none focus:border-blue-400"
                   />
                 </div>
                 <div className="flex items-center gap-2">
-                  {saving && <span className="text-xs text-gray-400">儲存中...</span>}
-                  {!saving && !dirty && <span className="text-xs text-gray-300">已儲存</span>}
+                  {saving && <span className="text-xs text-gray-400">Saving...</span>}
+                  {!saving && !dirty && <span className="text-xs text-gray-300">Saved</span>}
                   {search && matchCount > 0 && (
                     <span className="text-xs text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded">
-                      {matchCount} 個符合
+                      {matchCount} matches
                     </span>
                   )}
                   <button
@@ -227,13 +227,13 @@ export default function ReportsPage() {
                         : 'bg-blue-500 hover:bg-blue-600 text-white'
                     }`}
                   >
-                    {copied ? '✓ 已複製' : '複製到剪貼簿'}
+                    {copied ? '✓ Copied' : 'Copy to clipboard'}
                   </button>
                   <button
                     onClick={() => deleteDoc(selected.id)}
                     className="text-xs text-gray-400 hover:text-red-500 px-2 py-1.5"
                   >
-                    刪除
+                    Delete
                   </button>
                 </div>
               </div>
@@ -252,7 +252,7 @@ export default function ReportsPage() {
                   <textarea
                     value={content}
                     onChange={e => { setContent(e.target.value); setDirty(true); }}
-                    placeholder="在這裡貼上或撰寫週報內容..."
+                    placeholder="Paste or write your report content here..."
                     className="w-full h-full resize-none outline-none p-6 text-sm text-gray-700 leading-relaxed font-sans bg-white"
                     spellCheck={false}
                   />
@@ -262,12 +262,12 @@ export default function ReportsPage() {
           ) : (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
-                <p className="text-gray-400 mb-3">還沒有週報紀錄</p>
+                <p className="text-gray-400 mb-3">No reports yet</p>
                 <button
                   onClick={createNew}
                   className="text-sm text-blue-600 hover:text-blue-700 font-medium"
                 >
-                  + 新增第一份週報
+                  + Create your first report
                 </button>
               </div>
             </div>

@@ -1,47 +1,93 @@
-// Type definitions for the Supabase (multi-user) version of the app.
-// Once lib/db.ts is ported to use Supabase, the SQLite types in lib/types.ts
-// can be deleted and this file renamed to lib/types.ts.
-//
-// Differences from SQLite types:
-//   - boolean columns are real booleans (not 0/1)
-//   - user_id: string (uuid) added to private tables
-//   - created_by?: string added to shared tables (projects, report_docs)
-//   - timestamp columns are ISO strings produced by Supabase / Postgres timestamptz
+// Type definitions for the Influencer Marketing Manager (NVIDIA GeForce)
 
-export interface Profile {
-  id: string;
-  display_name: string | null;
-  role: 'admin';
+export type CreatorStatus = 'prospect' | 'evaluating' | 'active' | 'inactive' | 'blacklisted';
+export type CreatorTier = 'top' | 'mid' | 'micro' | 'nano';
+export type DeliverableStatus = 'prospect' | 'contacted' | 'onboarding' | 'brief_sent' | 'draft_review' | 'approved' | 'published' | 'data_in';
+
+export interface Creator {
+  id: number;
+  handle: string;
+  real_name: string | null;
+  email: string | null;
+  platforms: string[];
+  primary_platform: string | null;
+  tier: CreatorTier;
+  niche: string[];
+  status: CreatorStatus;
+  subscribers: number | null;
+  avg_views: number | null;
+  engagement_rate: number | null;
+  country: string | null;
+  language: string;
+  agency: string | null;
+  agency_contact: string | null;
+  rate_card: string | null;
+  affinity_tags: string[];
+  profile_url: string | null;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 }
 
-export interface Task {
+export interface Campaign {
   id: number;
-  user_id: string;
   title: string;
+  product: string | null;
+  campaign_type: string;
+  status: 'planning' | 'active' | 'completed' | 'cancelled';
+  brief_url: string | null;
+  budget: number | null;
+  start_date: string | null;
+  end_date: string | null;
   notes: string | null;
-  status: 'todo' | 'done' | 'archived';
-  category: string | null;
-  is_today: boolean;
-  report_flag: boolean;
-  is_recurring: boolean;
-  recurring_id: number | null;
+  sort_order: number;
+  created_by: string | null;
   created_at: string;
   updated_at: string;
-  completed_at: string | null;
+  links?: CampaignLink[];
+  deliverables?: Deliverable[];
+}
+
+export interface CampaignLink {
+  id: number;
+  campaign_id: number;
+  label: string | null;
+  url: string;
+  created_at: string;
+}
+
+export interface Deliverable {
+  id: number;
+  campaign_id: number;
+  creator_id: number;
+  deliverable_type: string;
+  platform: string | null;
+  status: DeliverableStatus;
   due_date: string | null;
-  scheduled_date: string | null;
+  publish_date: string | null;
+  content_url: string | null;
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  payment_amount: number | null;
+  payment_status: 'pending' | 'invoiced' | 'paid';
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  creator?: Pick<Creator, 'id' | 'handle' | 'tier' | 'primary_platform'>;
+  campaign?: Pick<Campaign, 'id' | 'title'>;
 }
 
-export interface RecurringTemplate {
+export interface Contact {
   id: number;
-  user_id: string;
-  title: string;
-  category: string | null;
+  name: string;
+  org: string | null;
+  org_type: 'agency' | 'brand' | 'internal' | 'legal';
+  role: string | null;
+  email: string | null;
   notes: string | null;
-  is_active: boolean;
   created_at: string;
+  updated_at: string;
 }
 
 export interface Note {
@@ -51,53 +97,6 @@ export interface Note {
   pinned: boolean;
   created_at: string;
   updated_at: string;
-}
-
-export interface SystemState {
-  key: string;
-  value: string;
-  updated_at: string;
-}
-
-// ---------- Shared tables ----------
-
-export interface Project {
-  id: number;
-  title: string;
-  status: 'active' | 'completed' | 'on_hold';
-  next_step: string | null;
-  notes: string | null;
-  sort_order: number;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-  completed_at: string | null;
-}
-
-export interface ProjectLink {
-  id: number;
-  project_id: number;
-  label: string | null;
-  url: string;
-  created_at: string;
-}
-
-export interface ProjectItem {
-  id: number;
-  project_id: number;
-  title: string;
-  progress: string | null;
-  next_step: string | null;
-  due_date: string | null;
-  status: 'active' | 'done';
-  sort_order: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ProjectWithLinks extends Project {
-  links: ProjectLink[];
-  items: ProjectItem[];
 }
 
 export interface ReportDoc {

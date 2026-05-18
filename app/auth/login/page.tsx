@@ -46,8 +46,8 @@ function LoginForm() {
         className="w-full max-w-sm bg-white rounded-lg shadow p-6 space-y-4"
       >
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">登入</h1>
-          <p className="text-sm text-gray-500 mt-1">工作管理</p>
+          <h1 className="text-xl font-semibold text-gray-900">Sign in</h1>
+          <p className="text-sm text-gray-500 mt-1">Work Manager</p>
         </div>
 
         <div className="space-y-3">
@@ -64,7 +64,7 @@ function LoginForm() {
           </label>
 
           <label className="block">
-            <span className="text-sm text-gray-700">密碼</span>
+            <span className="text-sm text-gray-700">Password</span>
             <input
               type="password"
               required
@@ -87,11 +87,11 @@ function LoginForm() {
           disabled={isPending}
           className="w-full rounded bg-blue-600 text-white text-sm font-medium py-2 hover:bg-blue-700 disabled:opacity-50"
         >
-          {isPending ? '登入中…' : '登入'}
+          {isPending ? 'Signing in…' : 'Sign in'}
         </button>
 
         <p className="text-xs text-gray-400 text-center">
-          帳號由管理員於 Supabase 建立
+          Accounts are created by the admin in Supabase
         </p>
       </form>
     </div>

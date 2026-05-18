@@ -1,306 +1,408 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import type { Task } from '@/lib/types';
-import TaskCard from '@/components/TaskCard';
-import Notepad from '@/components/Notepad';
-import WeeklyReportPanel from '@/components/WeeklyReportPanel';
-import RecurringTasksPanel from '@/components/RecurringTasksPanel';
-import RemindersPanel from '@/components/RemindersPanel';
+import type { Creator } from '@/lib/types';
+import Modal from '@/components/Modal';
 
-type DayTab = 'today' | 'tomorrow' | 'week' | 'inbox';
+const PLATFORMS = ['YouTube', 'Twitch', 'TikTok', 'Instagram', 'Twitter'];
+const NICHES = ['FPS', 'Tech Review', 'Hardware', 'AI', 'Productivity', 'General Gaming', 'Esports', 'Content Creation'];
+const STATUSES = ['prospect', 'evaluating', 'active', 'inactive', 'blacklisted'] as const;
+const TIERS = ['top', 'mid', 'micro', 'nano'] as const;
 
-function getDateStrings() {
-  const today = new Date();
-  const tomorrow = new Date(today.getTime() + 86400000);
-  const day = today.getDay();
-  const diffToSun = day === 0 ? 0 : 7 - day;
-  const sunday = new Date(today.getTime() + diffToSun * 86400000);
-  return {
-    today: today.toISOString().split('T')[0],
-    tomorrow: tomorrow.toISOString().split('T')[0],
-    weekEnd: sunday.toISOString().split('T')[0],
-  };
+function formatNumber(n: number | null | undefined): string {
+  if (!n) return '—';
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000) return (n / 1_000).toFixed(0) + 'K';
+  return n.toString();
 }
 
-const WEEKDAY_NAMES = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+const STATUS_COLORS: Record<string, string> = {
+  prospect: 'bg-gray-700 text-gray-300',
+  evaluating: 'bg-amber-900 text-amber-300',
+  active: 'bg-green-900 text-green-300',
+  inactive: 'bg-slate-800 text-slate-400',
+  blacklisted: 'bg-red-900 text-red-300',
+};
 
-function formatWeekday(dateStr: string) {
-  const d = new Date(dateStr + 'T00:00:00');
-  return `${WEEKDAY_NAMES[d.getDay()]} ${dateStr.slice(5)}`;
-}
+const TIER_COLORS: Record<string, string> = {
+  top: 'bg-purple-900 text-purple-300',
+  mid: 'bg-blue-900 text-blue-300',
+  micro: 'bg-teal-900 text-teal-300',
+  nano: 'bg-slate-800 text-slate-400',
+};
 
-// Deterministic category color based on name hash
-const TAG_PALETTE = [
-  'bg-blue-100 text-blue-700',
-  'bg-green-100 text-green-700',
-  'bg-purple-100 text-purple-700',
-  'bg-orange-100 text-orange-700',
-  'bg-pink-100 text-pink-700',
-  'bg-teal-100 text-teal-700',
-  'bg-indigo-100 text-indigo-700',
-  'bg-rose-100 text-rose-700',
-  'bg-yellow-100 text-yellow-700',
-  'bg-cyan-100 text-cyan-700',
-];
+const PLATFORM_COLORS: Record<string, string> = {
+  YouTube: 'bg-red-900 text-red-300',
+  Twitch: 'bg-purple-900 text-purple-300',
+  TikTok: 'bg-pink-900 text-pink-300',
+  Instagram: 'bg-orange-900 text-orange-300',
+  Twitter: 'bg-sky-900 text-sky-300',
+};
 
-export function categoryColor(cat: string): string {
-  let hash = 0;
-  for (const c of cat) hash = (hash * 31 + c.charCodeAt(0)) & 0xff;
-  return TAG_PALETTE[hash % TAG_PALETTE.length];
-}
+type FormValues = {
+  handle: string; real_name: string; email: string; platforms: string[]; primary_platform: string;
+  tier: string; niche: string[]; status: string;
+  subscribers: string; avg_views: string; engagement_rate: string; country: string; language: string;
+  agency: string; agency_contact: string; rate_card: string; affinity_tags: string; profile_url: string; notes: string;
+};
 
-export default function Dashboard() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [reportRefresh, setReportRefresh] = useState(0);
-  const [activeTab, setActiveTab] = useState<DayTab>('today');
-  const [newTitle, setNewTitle] = useState('');
-  const [newCategory, setNewCategory] = useState('');
-  const [showCatPicker, setShowCatPicker] = useState(false);
-  const { today, tomorrow, weekEnd } = getDateStrings();
+const EMPTY_FORM: FormValues = {
+  handle: '', real_name: '', email: '', platforms: [], primary_platform: '',
+  tier: 'mid', niche: [], status: 'prospect',
+  subscribers: '', avg_views: '', engagement_rate: '', country: '', language: 'English',
+  agency: '', agency_contact: '', rate_card: '', affinity_tags: '', profile_url: '', notes: '',
+};
 
-  const fetchTasks = useCallback(async () => {
-    const res = await fetch('/api/tasks?status=all');
-    const data = await res.json();
-    setTasks(data.tasks);
-    setCategories(data.categories);
-  }, []);
+export default function CreatorsPage() {
+  const [creators, setCreators] = useState<Creator[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [tierFilter, setTierFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [showAdd, setShowAdd] = useState(false);
+  const [selectedCreator, setSelectedCreator] = useState<Creator | null>(null);
+  const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [editForm, setEditForm] = useState({ ...EMPTY_FORM });
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    fetchTasks();
-    fetch('/api/cron/monday-reset', { method: 'POST' }).then(() => fetchTasks());
-  }, [fetchTasks]);
+  const fetchCreators = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (statusFilter !== 'all') params.set('status', statusFilter);
+    if (tierFilter !== 'all') params.set('tier', tierFilter);
+    const res = await fetch('/api/creators?' + params.toString());
+    if (res.ok) setCreators(await res.json());
+    setLoading(false);
+  }, [statusFilter, tierFilter]);
 
-  async function addTask() {
-    const title = newTitle.trim();
-    if (!title) return;
-    const scheduledDate = activeTab === 'today' ? today
-      : activeTab === 'tomorrow' ? tomorrow
-      : undefined;
-    await fetch('/api/tasks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title,
-        category: newCategory || undefined,
-        scheduled_date: scheduledDate,
-      }),
-    });
-    setNewTitle('');
-    fetchTasks();
-  }
+  useEffect(() => { fetchCreators(); }, [fetchCreators]);
 
-  async function updateTask(id: number, data: Partial<Task>) {
-    await fetch(`/api/tasks/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    fetchTasks();
-    if ('report_flag' in data) setReportRefresh(n => n + 1);
-  }
-
-  async function deleteTask(id: number) {
-    await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
-    fetchTasks();
-  }
-
-  const activeTasks = tasks.filter(t => t.status !== 'archived');
-
-  const todayTasks    = activeTasks.filter(t => t.scheduled_date === today);
-  const tomorrowTasks = activeTasks.filter(t => t.scheduled_date === tomorrow);
-  const inboxTasks    = activeTasks.filter(t => !t.scheduled_date);
-  const weekTasks     = activeTasks.filter(t =>
-    t.scheduled_date && t.scheduled_date > tomorrow && t.scheduled_date <= weekEnd
+  const filtered = creators.filter(c =>
+    !search || c.handle.toLowerCase().includes(search.toLowerCase()) ||
+    (c.real_name?.toLowerCase().includes(search.toLowerCase())) ||
+    (c.agency?.toLowerCase().includes(search.toLowerCase()))
   );
 
-  // Group week tasks by date
-  const weekGroups = weekTasks.reduce<Record<string, Task[]>>((acc, t) => {
-    const d = t.scheduled_date!;
-    acc[d] = acc[d] ? [...acc[d], t] : [t];
-    return acc;
-  }, {});
-  const weekDates = Object.keys(weekGroups).sort();
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    const payload = {
+      ...form,
+      subscribers: form.subscribers ? Number(form.subscribers) : null,
+      avg_views: form.avg_views ? Number(form.avg_views) : null,
+      engagement_rate: form.engagement_rate ? Number(form.engagement_rate) : null,
+      affinity_tags: form.affinity_tags ? form.affinity_tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+      primary_platform: form.primary_platform || null,
+    };
+    await fetch('/api/creators', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    setSaving(false);
+    setShowAdd(false);
+    setForm({ ...EMPTY_FORM });
+    fetchCreators();
+  }
 
-  const tabTasks: Task[] = activeTab === 'today' ? todayTasks
-    : activeTab === 'tomorrow' ? tomorrowTasks
-    : activeTab === 'inbox' ? inboxTasks
-    : weekTasks;
+  async function handleSaveEdit() {
+    if (!selectedCreator) return;
+    setSaving(true);
+    const payload = {
+      ...editForm,
+      subscribers: editForm.subscribers ? Number(editForm.subscribers) : null,
+      avg_views: editForm.avg_views ? Number(editForm.avg_views) : null,
+      engagement_rate: editForm.engagement_rate ? Number(editForm.engagement_rate) : null,
+      affinity_tags: typeof editForm.affinity_tags === 'string'
+        ? editForm.affinity_tags.split(',').map((t: string) => t.trim()).filter(Boolean)
+        : editForm.affinity_tags,
+    };
+    const res = await fetch(`/api/creators/${selectedCreator.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    if (res.ok) {
+      const updated = await res.json();
+      setSelectedCreator(updated);
+      fetchCreators();
+    }
+    setSaving(false);
+  }
 
-  const TAB_CONFIG: { id: DayTab; label: string; count: number }[] = [
-    { id: 'today',    label: '今天',  count: todayTasks.filter(t => t.status !== 'done').length },
-    { id: 'tomorrow', label: '明天',  count: tomorrowTasks.filter(t => t.status !== 'done').length },
-    { id: 'week',     label: '本週',  count: weekTasks.filter(t => t.status !== 'done').length },
-    { id: 'inbox',    label: 'Inbox', count: inboxTasks.filter(t => t.status !== 'done').length },
-  ];
+  async function handleDelete(creator: Creator) {
+    if (!confirm(`Delete @${creator.handle}? This cannot be undone.`)) return;
+    await fetch(`/api/creators/${creator.id}`, { method: 'DELETE' });
+    setSelectedCreator(null);
+    fetchCreators();
+  }
 
-  const showAddInput = activeTab !== 'week';
+  function openEdit(creator: Creator) {
+    setSelectedCreator(creator);
+    setEditForm({
+      handle: creator.handle,
+      real_name: creator.real_name ?? '',
+      email: creator.email ?? '',
+      platforms: creator.platforms ?? [],
+      primary_platform: creator.primary_platform ?? '',
+      tier: creator.tier,
+      niche: creator.niche ?? [],
+      status: creator.status,
+      subscribers: creator.subscribers?.toString() ?? '',
+      avg_views: creator.avg_views?.toString() ?? '',
+      engagement_rate: creator.engagement_rate?.toString() ?? '',
+      country: creator.country ?? '',
+      language: creator.language ?? 'English',
+      agency: creator.agency ?? '',
+      agency_contact: creator.agency_contact ?? '',
+      rate_card: creator.rate_card ?? '',
+      affinity_tags: (creator.affinity_tags ?? []).join(', '),
+      profile_url: creator.profile_url ?? '',
+      notes: creator.notes ?? '',
+    });
+  }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h1 className="font-semibold text-gray-800">工作管理</h1>
-          <nav className="flex items-center gap-1">
-            <span className="text-xs font-medium text-gray-700 bg-gray-100 px-3 py-1.5 rounded">今日待辦</span>
-            <a href="/projects" className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded hover:bg-gray-100">專案追蹤</a>
-            <a href="/reports" className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded hover:bg-gray-100">週報記錄</a>
-          </nav>
-          <span className="text-sm text-gray-400">
-            {new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'long' })}
-          </span>
+  function FormFields({ values, onChange }: { values: FormValues; onChange: (k: string, v: unknown) => void }) {
+    return (
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Handle *</label>
+            <input className="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-md px-3 py-2 text-sm" value={values.handle} onChange={e => onChange('handle', e.target.value)} required placeholder="@username" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Real Name</label>
+            <input className="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-md px-3 py-2 text-sm" value={values.real_name} onChange={e => onChange('real_name', e.target.value)} />
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <form action="/auth/signout" method="post">
-            <button type="submit" className="text-xs text-gray-400 hover:text-gray-600">
-              登出
-            </button>
-          </form>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Email</label>
+            <input type="email" className="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-md px-3 py-2 text-sm" value={values.email} onChange={e => onChange('email', e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Status</label>
+            <select className="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-md px-3 py-2 text-sm" value={values.status} onChange={e => onChange('status', e.target.value)}>
+              {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+            </select>
+          </div>
         </div>
-      </header>
-
-      <div className="max-w-6xl mx-auto px-4 py-5 flex gap-5">
-        {/* Left panel */}
-        <div className="flex-1 min-w-0">
-          {/* Day tabs */}
-          <div className="flex items-center gap-1 mb-4 border-b border-gray-200 pb-0">
-            {TAB_CONFIG.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
-                  activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {tab.label}
-                {tab.count > 0 && (
-                  <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
-                    activeTab === tab.id ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'
-                  }`}>{tab.count}</span>
-                )}
-              </button>
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block">Platforms</label>
+          <div className="flex flex-wrap gap-2">
+            {PLATFORMS.map(p => (
+              <label key={p} className="flex items-center gap-1.5 text-sm text-gray-300 cursor-pointer">
+                <input type="checkbox" checked={values.platforms.includes(p)} onChange={e => {
+                  const updated = e.target.checked ? [...values.platforms, p] : values.platforms.filter(x => x !== p);
+                  onChange('platforms', updated);
+                }} className="rounded" />
+                {p}
+              </label>
             ))}
           </div>
-
-          {/* Week view: grouped by day */}
-          {activeTab === 'week' ? (
-            <div className="space-y-4">
-              {weekDates.length === 0 && (
-                <p className="text-sm text-gray-400 py-4 text-center">本週沒有排定的任務</p>
-              )}
-              {weekDates.map(date => (
-                <div key={date}>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
-                    {formatWeekday(date)}
-                  </p>
-                  {weekGroups[date].map(t => (
-                    <TaskCard key={t.id} task={t} categories={categories} onUpdate={updateTask} onDelete={deleteTask} />
-                  ))}
-                </div>
-              ))}
-            </div>
-          ) : (
-            /* Day / Inbox flat list */
-            <div>
-              {/* Active tasks */}
-              {tabTasks.filter(t => t.status !== 'done').map(t => (
-                <TaskCard key={t.id} task={t} categories={categories} onUpdate={updateTask} onDelete={deleteTask} />
-              ))}
-
-              {/* Done tasks collapsed */}
-              {tabTasks.filter(t => t.status === 'done').length > 0 && (
-                <details className="mt-2">
-                  <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-500 py-1">
-                    {tabTasks.filter(t => t.status === 'done').length} 項已完成
-                  </summary>
-                  {tabTasks.filter(t => t.status === 'done').map(t => (
-                    <TaskCard key={t.id} task={t} categories={categories} onUpdate={updateTask} onDelete={deleteTask} />
-                  ))}
-                </details>
-              )}
-
-              {tabTasks.length === 0 && (
-                <p className="text-sm text-gray-400 py-3">沒有任務</p>
-              )}
-
-              {/* Add task input */}
-              {showAddInput && (
-                <div className="mt-3">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={newTitle}
-                      onChange={e => setNewTitle(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') addTask(); }}
-                      placeholder="+ 新增任務..."
-                      className="flex-1 bg-transparent text-sm text-gray-500 placeholder-gray-400 outline-none py-1 px-1 hover:text-gray-700 focus:text-gray-800"
-                    />
-                    {/* Category tag selector */}
-                    <div className="relative">
-                      <button
-                        onClick={() => setShowCatPicker(!showCatPicker)}
-                        className={`text-xs px-2 py-1 rounded border transition-colors ${
-                          newCategory
-                            ? `${categoryColor(newCategory)} border-transparent`
-                            : 'text-gray-400 border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        {newCategory || '# 標籤'}
-                      </button>
-                      {showCatPicker && (
-                        <div className="absolute left-0 top-full mt-1 z-10 bg-white border border-gray-200 rounded-lg shadow-lg p-2 min-w-[140px]">
-                          <button
-                            onClick={() => { setNewCategory(''); setShowCatPicker(false); }}
-                            className="block w-full text-left text-xs text-gray-400 px-2 py-1 hover:bg-gray-50 rounded"
-                          >
-                            無標籤
-                          </button>
-                          {categories.map(cat => (
-                            <button
-                              key={cat}
-                              onClick={() => { setNewCategory(cat); setShowCatPicker(false); }}
-                              className={`block w-full text-left text-xs px-2 py-1 rounded mt-0.5 ${categoryColor(cat)}`}
-                            >
-                              {cat}
-                            </button>
-                          ))}
-                          <NewCategoryInput onAdd={cat => { setNewCategory(cat); setShowCatPicker(false); }} />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </div>
-
-        {/* Right panel */}
-        <div className="w-72 flex-shrink-0 space-y-4">
-          <RemindersPanel />
-          <Notepad />
-          <WeeklyReportPanel refreshKey={reportRefresh} />
-          <RecurringTasksPanel />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Primary Platform</label>
+            <select className="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-md px-3 py-2 text-sm" value={values.primary_platform} onChange={e => onChange('primary_platform', e.target.value)}>
+              <option value="">—</option>
+              {PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Tier</label>
+            <select className="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-md px-3 py-2 text-sm" value={values.tier} onChange={e => onChange('tier', e.target.value)}>
+              {TIERS.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block">Niche</label>
+          <div className="flex flex-wrap gap-2">
+            {NICHES.map(n => (
+              <label key={n} className="flex items-center gap-1.5 text-sm text-gray-300 cursor-pointer">
+                <input type="checkbox" checked={values.niche.includes(n)} onChange={e => {
+                  const updated = e.target.checked ? [...values.niche, n] : values.niche.filter(x => x !== n);
+                  onChange('niche', updated);
+                }} className="rounded" />
+                {n}
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Subscribers</label>
+            <input type="number" className="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-md px-3 py-2 text-sm" value={values.subscribers} onChange={e => onChange('subscribers', e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Avg Views</label>
+            <input type="number" className="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-md px-3 py-2 text-sm" value={values.avg_views} onChange={e => onChange('avg_views', e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Eng. Rate %</label>
+            <input type="number" step="0.01" className="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-md px-3 py-2 text-sm" value={values.engagement_rate} onChange={e => onChange('engagement_rate', e.target.value)} />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Country</label>
+            <input className="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-md px-3 py-2 text-sm" value={values.country} onChange={e => onChange('country', e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Language</label>
+            <input className="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-md px-3 py-2 text-sm" value={values.language} onChange={e => onChange('language', e.target.value)} />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Agency</label>
+            <input className="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-md px-3 py-2 text-sm" value={values.agency} onChange={e => onChange('agency', e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Agency Contact</label>
+            <input className="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-md px-3 py-2 text-sm" value={values.agency_contact} onChange={e => onChange('agency_contact', e.target.value)} />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block">Rate Card</label>
+          <input className="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-md px-3 py-2 text-sm" value={values.rate_card} onChange={e => onChange('rate_card', e.target.value)} placeholder="e.g. $5k per dedicated video" />
+        </div>
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block">Affinity Tags (comma-separated)</label>
+          <input className="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-md px-3 py-2 text-sm" value={values.affinity_tags as string} onChange={e => onChange('affinity_tags', e.target.value)} placeholder="geforce, rtx, dlss" />
+        </div>
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block">Profile URL</label>
+          <input type="url" className="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-md px-3 py-2 text-sm" value={values.profile_url} onChange={e => onChange('profile_url', e.target.value)} />
+        </div>
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block">Notes</label>
+          <textarea rows={3} className="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-md px-3 py-2 text-sm resize-none" value={values.notes} onChange={e => onChange('notes', e.target.value)} />
         </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
-function NewCategoryInput({ onAdd }: { onAdd: (cat: string) => void }) {
-  const [val, setVal] = useState('');
   return (
-    <input
-      type="text"
-      value={val}
-      onChange={e => setVal(e.target.value)}
-      onKeyDown={e => {
-        if (e.key === 'Enter' && val.trim()) { onAdd(val.trim()); setVal(''); }
-      }}
-      placeholder="+ 新增標籤"
-      className="mt-1 w-full text-xs border border-dashed border-gray-300 rounded px-2 py-1 outline-none focus:border-blue-400"
-    />
+    <div className="p-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-100">Creators</h1>
+        <button onClick={() => setShowAdd(true)} className="bg-[#76b900] hover:bg-[#8fd400] text-black font-semibold rounded-md px-4 py-2 text-sm transition-colors">
+          + Add Creator
+        </button>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-3 mb-5">
+        <div className="flex gap-1 bg-gray-900 rounded-lg p-1 border border-gray-800">
+          {['all', ...STATUSES].map(s => (
+            <button key={s} onClick={() => setStatusFilter(s)}
+              className={`px-3 py-1 rounded-md text-sm transition-colors ${statusFilter === s ? 'bg-gray-700 text-gray-100' : 'text-gray-400 hover:text-gray-200'}`}>
+              {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
+            </button>
+          ))}
+        </div>
+        <select value={tierFilter} onChange={e => setTierFilter(e.target.value)}
+          className="bg-gray-900 border border-gray-800 text-gray-300 rounded-md px-3 py-1.5 text-sm">
+          <option value="all">All Tiers</option>
+          {TIERS.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+        </select>
+        <input value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Search handles, names, agencies..."
+          className="bg-gray-900 border border-gray-800 text-gray-100 rounded-md px-3 py-1.5 text-sm w-64 placeholder-gray-500" />
+      </div>
+
+      {/* Table */}
+      {loading ? (
+        <div className="text-gray-500 text-sm">Loading...</div>
+      ) : (
+        <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-800 text-left">
+                <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Handle</th>
+                <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Platforms</th>
+                <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Tier</th>
+                <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Subscribers</th>
+                <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Views</th>
+                <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Agency</th>
+                <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Affinity Tags</th>
+                <th className="px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 && (
+                <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-500">No creators yet. Add your first one!</td></tr>
+              )}
+              {filtered.map(creator => (
+                <tr key={creator.id} onClick={() => openEdit(creator)}
+                  className="border-b border-gray-800 hover:bg-gray-800/50 cursor-pointer transition-colors">
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-[#76b900]">@{creator.handle}</div>
+                    {creator.real_name && <div className="text-xs text-gray-500">{creator.real_name}</div>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {(creator.platforms ?? []).slice(0, 3).map(p => (
+                        <span key={p} className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${PLATFORM_COLORS[p] ?? 'bg-gray-700 text-gray-300'}`}>{p.slice(0, 2)}</span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${TIER_COLORS[creator.tier] ?? ''}`}>{creator.tier}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[creator.status] ?? ''}`}>{creator.status}</span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-300">{formatNumber(creator.subscribers)}</td>
+                  <td className="px-4 py-3 text-gray-300">{formatNumber(creator.avg_views)}</td>
+                  <td className="px-4 py-3 text-gray-400 text-xs">{creator.agency ?? '—'}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {(creator.affinity_tags ?? []).slice(0, 3).map(tag => (
+                        <span key={tag} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-gray-800 text-gray-400">{tag}</span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                    <button onClick={() => handleDelete(creator)} className="text-gray-600 hover:text-red-400 transition-colors text-lg">🗑</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Add Modal */}
+      {showAdd && (
+        <Modal title="Add Creator" onClose={() => setShowAdd(false)} wide>
+          <form onSubmit={handleAdd}>
+            <FormFields values={form} onChange={(k, v) => setForm(prev => ({ ...prev, [k]: v }))} />
+            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-800">
+              <button type="button" onClick={() => setShowAdd(false)} className="bg-gray-800 hover:bg-gray-700 text-gray-100 rounded-md px-4 py-2 text-sm">Cancel</button>
+              <button type="submit" disabled={saving} className="bg-[#76b900] hover:bg-[#8fd400] text-black font-semibold rounded-md px-4 py-2 text-sm disabled:opacity-50">
+                {saving ? 'Saving...' : 'Add Creator'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Edit Side Panel */}
+      {selectedCreator && (
+        <div className="fixed inset-y-0 right-0 w-[420px] bg-gray-900 border-l border-gray-800 shadow-2xl z-40 flex flex-col">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
+            <h2 className="text-lg font-semibold text-gray-100">@{selectedCreator.handle}</h2>
+            <button onClick={() => setSelectedCreator(null)} className="text-gray-400 hover:text-gray-100 text-xl">×</button>
+          </div>
+          <div className="overflow-y-auto flex-1 px-5 py-4">
+            <FormFields values={editForm} onChange={(k, v) => setEditForm(prev => ({ ...prev, [k]: v }))} />
+          </div>
+          <div className="px-5 py-4 border-t border-gray-800 flex justify-between">
+            <button onClick={() => handleDelete(selectedCreator)} className="text-red-400 hover:text-red-300 text-sm">Delete</button>
+            <div className="flex gap-3">
+              <button onClick={() => setSelectedCreator(null)} className="bg-gray-800 hover:bg-gray-700 text-gray-100 rounded-md px-4 py-2 text-sm">Cancel</button>
+              <button onClick={handleSaveEdit} disabled={saving} className="bg-[#76b900] hover:bg-[#8fd400] text-black font-semibold rounded-md px-4 py-2 text-sm disabled:opacity-50">
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
